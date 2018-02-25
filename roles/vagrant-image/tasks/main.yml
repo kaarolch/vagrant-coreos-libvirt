@@ -1,0 +1,95 @@
+---
+
+- name: Prepare folder stucture
+  become: yes
+  file:
+    path: "{{item}}"
+    recurse: yes
+    state: directory
+  with_items:
+    - "{{ vm_location }}/{{ machine_name}}"
+    - "{{ vm_location }}/images/{{ machine_name}}"
+    - "{{ vm_location }}/vagrant/{{ machine_name}}"
+
+- name: Download images
+  become: yes
+  get_url:
+    url: "{{ item }}"
+    dest: "{{ vm_location }}/images/{{ machine_name }}/{{ item | basename }}"
+  with_items:
+    - "{{ coreos_key }}"
+    - "{{ coreos_image }}"
+    - "{{ coreos_image }}.sig"
+
+- name: Import GPG coreos_key
+  become: yes
+  command: "gpg --import --keyid-format LONG {{ vm_location }}/images/{{ machine_name }}/{{ coreos_key | basename }}"
+
+- name: Check sign
+  become: yes
+  command: "gpg --verify {{ vm_location }}/images/{{ machine_name }}/{{ coreos_image | basename }}.sig"
+  register: command_result
+  failed_when: "'Good signature' not in command_result.stderr"
+
+- name: Extract machine_file
+  become: yes
+  command: "bzip2 -d -q -f {{ vm_location }}/images/{{ machine_name }}/{{ coreos_image | basename }}"
+
+- name: Convert img to qcow2 file
+  become: yes
+  command: "qemu-img create -f qcow2 -b {{ vm_location }}/images/{{ machine_name }}/{{ coreos_image | basename | splitext | first }} {{ vm_location }}/images/{{ machine_name}}/{{ machine_name }}.qcow2"
+
+- name: Create provision file
+  become: yes
+  template:
+    src: provision.ign.j2
+    dest: "{{ vm_location }}/{{ machine_name }}/provision.ign"
+
+- name: Virsh define machine
+  virt:
+      name: coreos
+      command: define
+      xml: "{{ lookup('template', 'domain.xml.j2') }}"
+
+- name: Wait for machine bootup
+  pause:
+    seconds: 45
+    prompt: "Applying provision.ing file: user, sudo rules etc."
+
+- name: Stop vm
+  virt:
+      name: coreos
+      state: shutdown
+
+- name: Wait for machine shutdown
+  pause:
+    seconds: 30
+    prompt: "Shutdown...."
+
+- name: Unattach vm
+  virt:
+      name: coreos
+      state: destroyed
+
+# Prepare vagrant image pack
+
+- name: Copy image to vagrant box
+  become: yes
+  copy:
+    src: {{ vm_location }}/images/{{ machine_name}}/{{ machine_name }}.qcow2
+    dest: {{ vagrant_box_location: }}/box.img
+
+- name: Copy Vagrant machine definition
+  become: yes
+  copy:
+    src: {{ item }}
+    dest: {{ vagrant_box_location: }}/
+  with_items:
+    - "{{ role_path }}/files/metadata.json"
+    - "{{ role_path }}/files/Vagrantfile"
+
+- name: Create vagrant archive
+  become: yes
+  archive:
+    path: "{{ vagrant_box_location: }}/*"
+    dest: "{{ vagrant_box_location: }}/coreos.box"
