@@ -37,7 +37,7 @@
 
 - name: Convert img to qcow2 file
   become: yes
-  command: "qemu-img create -f qcow2 -b {{ vm_location }}/images/{{ machine_name }}/{{ coreos_image | basename | splitext | first }} {{ vm_location }}/images/{{ machine_name}}/{{ machine_name }}.qcow2"
+  command: "qemu-img convert -f raw -O qcow2 {{ vm_location }}/images/{{ machine_name }}/{{ coreos_image | basename | splitext | first }} {{ vm_location }}/images/{{ machine_name}}/{{ machine_name }}.qcow2"
 
 - name: Create provision file
   become: yes
@@ -76,14 +76,14 @@
 - name: Copy image to vagrant box
   become: yes
   copy:
-    src: {{ vm_location }}/images/{{ machine_name}}/{{ machine_name }}.qcow2
-    dest: {{ vagrant_box_location: }}/box.img
+    src: "{{ vm_location }}/images/{{ machine_name}}/{{ machine_name }}.qcow2"
+    dest: "{{ vagrant_box_location }}/box.img"
 
 - name: Copy Vagrant machine definition
   become: yes
   copy:
-    src: {{ item }}
-    dest: {{ vagrant_box_location: }}/
+    src: "{{ item }}"
+    dest: "{{ vagrant_box_location }}/"
   with_items:
     - "{{ role_path }}/files/metadata.json"
     - "{{ role_path }}/files/Vagrantfile"
@@ -91,5 +91,88 @@
 - name: Create vagrant archive
   become: yes
   archive:
-    path: "{{ vagrant_box_location: }}/*"
-    dest: "{{ vagrant_box_location: }}/coreos.box"
+    path: "{{ vagrant_box_location }}/*"
+    dest: "{{ vagrant_box_location }}/{{machine_name}}.box"
+
+- name: Get coreos version file content
+  uri:
+    url: "{{ coreos_version }}"
+    return_content: yes
+  register: coreos_version_content
+
+- name: Check if box exist
+  uri:
+    url: "{{ vagrant_cloud_api }}/box/{{ vagrant_cloud_user}}/{{ machine_name }}-{{coreos_channel}}"
+    headers:
+      Authorization: "Bearer {{ vagrant_cloud_token}}"
+    status_code: 200,404
+  register: box
+
+- name: Create new box
+  uri:
+    url: "{{ vagrant_cloud_api }}/boxes"
+    headers:
+      Content-Type: application/json
+      Authorization: "Bearer {{ vagrant_cloud_token}}"
+    body: '{ "box": { "username": "{{ vagrant_cloud_user}}", "name": "{{ machine_name }}-{{ coreos_channel }}", "is_private": "{{ vagrant_private_img }}", "short_description": "{{ vagrant_description }}"  } }'
+    method: POST
+    body_format: json
+  when: box.status != 200
+
+- name: Check if version exist
+  uri:
+    url: "{{ vagrant_cloud_api }}/box/{{ vagrant_cloud_user}}/{{ machine_name }}-{{coreos_channel}}/version/{{ coreos_version_content.content.splitlines()[3].split('=')[1] }}"
+    headers:
+      Authorization: "Bearer {{ vagrant_cloud_token}}"
+    status_code: 200,404
+  register: box_version
+
+- name: Create new version
+  uri:
+    url: "{{ vagrant_cloud_api }}/box/{{ vagrant_cloud_user}}/{{ machine_name }}-{{coreos_channel}}/versions"
+    method: POST
+    headers:
+      Content-Type: application/json
+      Authorization: "Bearer {{ vagrant_cloud_token}}"
+    body: '{ "version": { "version": "{{ coreos_version_content.content.splitlines()[3].split("=")[1] }}" } }'
+    body_format: json
+  when: box_version.status != 200
+
+- name: Check if provider exist
+  uri:
+    url: "{{ vagrant_cloud_api }}/box/{{ vagrant_cloud_user}}/{{ machine_name }}-{{coreos_channel}}/version/{{ coreos_version_content.content.splitlines()[3].split('=')[1] }}/provider/libvirt"
+    headers:
+      Authorization: "Bearer {{ vagrant_cloud_token}}"
+    status_code: 200,404
+  register: box_version_provider
+
+- name: Create new provider
+  uri:
+    url: "{{ vagrant_cloud_api }}/box/{{ vagrant_cloud_user}}/{{ machine_name }}-{{coreos_channel}}/version/{{ coreos_version_content.content.splitlines()[3].split('=')[1] }}/providers"
+    method: POST
+    headers:
+      Content-Type: application/json
+      Authorization: "Bearer {{ vagrant_cloud_token}}"
+    body: '{ "provider": { "name": "libvirt" } }'
+    body_format: json
+  when: box_version_provider.status != 200
+
+- name: Create upload url
+  uri:
+    url: "{{ vagrant_cloud_api }}/box/{{ vagrant_cloud_user}}/{{ machine_name }}-{{coreos_channel}}/version/{{ coreos_version_content.content.splitlines()[3].split('=')[1] }}/provider/libvirt/upload"
+    method: GET
+    headers:
+      Authorization: "Bearer {{ vagrant_cloud_token}}"
+    body_format: json
+  register: upload_link
+
+- name: Upload coreos image
+  command:  " curl -X PUT --upload-file {{ vagrant_box_location }}/{{machine_name}}.box https://archivist.hashicorp.com/v1/object/{{ upload_link.json.upload_path }}"
+  register: upload_content
+
+- name: Release new version
+  uri:
+    url: "{{ vagrant_cloud_api }}/box/{{ vagrant_cloud_user}}/{{ machine_name }}-{{coreos_channel}}/version/{{ coreos_version_content.content.splitlines()[3].split('=')[1] }}/release"
+    method: PUT
+    headers:
+      Authorization: "Bearer {{ vagrant_cloud_token}}"

@@ -2,10 +2,14 @@
 # Global varaible use in some roles
 
 machine_name: coreos
-coreos_key: https://coreos.com/security/image-signing-key/CoreOS_Image_Signing_Key.asc
 vm_location: /var/lib/libvirt
 vagrant_box_location: "{{ vm_location }}/vagrant/{{ machine_name}}"
-coreos_image: https://stable.release.core-os.net/amd64-usr/current/coreos_production_qemu_image.img.bz2
+
+# Coreos image links
+coreos_channel: stable
+coreos_key: https://coreos.com/security/image-signing-key/CoreOS_Image_Signing_Key.asc
+coreos_image: https://{{ coreos_channel }}.release.core-os.net/amd64-usr/current/coreos_production_qemu_image.img.bz2
+coreos_version: https://{{ coreos_channel }}.release.core-os.net/amd64-usr/current/version.txt
 
 vagrant_user: vagrant
 #https://raw.githubusercontent.com/hashicorp/vagrant/master/keys/vagrant.pub
