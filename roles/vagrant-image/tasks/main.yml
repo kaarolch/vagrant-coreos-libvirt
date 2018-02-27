@@ -100,6 +100,10 @@
     return_content: yes
   register: coreos_version_content
 
+- name: Set version fact
+  set_fact:
+    image_version: "{{ coreos_version_content.content.splitlines()[3].split('=')[1] }}"
+
 - name: Check if box exist
   uri:
     url: "{{ vagrant_cloud_api }}/box/{{ vagrant_cloud_user}}/{{ machine_name }}-{{coreos_channel}}"
@@ -121,7 +125,7 @@
 
 - name: Check if version exist
   uri:
-    url: "{{ vagrant_cloud_api }}/box/{{ vagrant_cloud_user}}/{{ machine_name }}-{{coreos_channel}}/version/{{ coreos_version_content.content.splitlines()[3].split('=')[1] }}"
+    url: "{{ vagrant_cloud_api }}/box/{{ vagrant_cloud_user}}/{{ machine_name }}-{{coreos_channel}}/version/{{ image_version }}"
     headers:
       Authorization: "Bearer {{ vagrant_cloud_token}}"
     status_code: 200,404
@@ -134,13 +138,13 @@
     headers:
       Content-Type: application/json
       Authorization: "Bearer {{ vagrant_cloud_token}}"
-    body: '{ "version": { "version": "{{ coreos_version_content.content.splitlines()[3].split("=")[1] }}" } }'
+    body: '{ "version": { "version": "{{ image_version }}" } }'
     body_format: json
   when: box_version.status != 200
 
 - name: Check if provider exist
   uri:
-    url: "{{ vagrant_cloud_api }}/box/{{ vagrant_cloud_user}}/{{ machine_name }}-{{coreos_channel}}/version/{{ coreos_version_content.content.splitlines()[3].split('=')[1] }}/provider/libvirt"
+    url: "{{ vagrant_cloud_api }}/box/{{ vagrant_cloud_user}}/{{ machine_name }}-{{coreos_channel}}/version/{{ image_version }}/provider/libvirt"
     headers:
       Authorization: "Bearer {{ vagrant_cloud_token}}"
     status_code: 200,404
@@ -148,7 +152,7 @@
 
 - name: Create new provider
   uri:
-    url: "{{ vagrant_cloud_api }}/box/{{ vagrant_cloud_user}}/{{ machine_name }}-{{coreos_channel}}/version/{{ coreos_version_content.content.splitlines()[3].split('=')[1] }}/providers"
+    url: "{{ vagrant_cloud_api }}/box/{{ vagrant_cloud_user}}/{{ machine_name }}-{{coreos_channel}}/version/{{ image_version }}/providers"
     method: POST
     headers:
       Content-Type: application/json
@@ -159,7 +163,7 @@
 
 - name: Create upload url
   uri:
-    url: "{{ vagrant_cloud_api }}/box/{{ vagrant_cloud_user}}/{{ machine_name }}-{{coreos_channel}}/version/{{ coreos_version_content.content.splitlines()[3].split('=')[1] }}/provider/libvirt/upload"
+    url: "{{ vagrant_cloud_api }}/box/{{ vagrant_cloud_user}}/{{ machine_name }}-{{coreos_channel}}/version/{{ image_version }}/provider/libvirt/upload"
     method: GET
     headers:
       Authorization: "Bearer {{ vagrant_cloud_token}}"
@@ -172,7 +176,7 @@
 
 - name: Release new version
   uri:
-    url: "{{ vagrant_cloud_api }}/box/{{ vagrant_cloud_user}}/{{ machine_name }}-{{coreos_channel}}/version/{{ coreos_version_content.content.splitlines()[3].split('=')[1] }}/release"
+    url: "{{ vagrant_cloud_api }}/box/{{ vagrant_cloud_user}}/{{ machine_name }}-{{coreos_channel}}/version/{{ image_version }}/release"
     method: PUT
     headers:
       Authorization: "Bearer {{ vagrant_cloud_token}}"
