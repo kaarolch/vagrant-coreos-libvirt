@@ -180,3 +180,13 @@
     method: PUT
     headers:
       Authorization: "Bearer {{ vagrant_cloud_token}}"
+
+- name: Remove old files
+  become: yes
+  file:
+    path: "{{item}}"
+    state: absent
+  with_items:
+    - "{{ vm_location }}/{{ machine_name}}"
+    - "{{ vm_location }}/images/{{ machine_name}}"
+    - "{{ vm_location }}/vagrant/{{ machine_name}}"
