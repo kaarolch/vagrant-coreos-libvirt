@@ -171,7 +171,7 @@
   register: upload_link
 
 - name: Upload coreos image
-  command:  " curl -X PUT --upload-file {{ vagrant_box_location }}/{{machine_name}}.box https://archivist.hashicorp.com/v1/object/{{ upload_link.json.upload_path }}"
+  command:  " curl -X PUT --upload-file {{ vagrant_box_location }}/{{machine_name}}.box {{ upload_link.json.upload_path }}"
   register: upload_content
 
 - name: Release new version
