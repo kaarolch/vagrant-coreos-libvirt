@@ -35,10 +35,6 @@
   become: yes
   command: "bzip2 -d -q -f {{ vm_location }}/images/{{ machine_name }}/{{ coreos_image | basename }}"
 
-- name: Convert img to qcow2 file
-  become: yes
-  command: "qemu-img convert -f raw -O qcow2 {{ vm_location }}/images/{{ machine_name }}/{{ coreos_image | basename | splitext | first }} {{ vm_location }}/images/{{ machine_name}}/{{ machine_name }}.qcow2"
-
 - name: Create provision file
   become: yes
   template:
@@ -50,6 +46,11 @@
       name: coreos
       command: define
       xml: "{{ lookup('template', 'domain.xml.j2') }}"
+
+- name: Stop vm
+  virt:
+      name: coreos
+      state: running
 
 - name: Wait for machine bootup
   pause:
@@ -76,7 +77,7 @@
 - name: Copy image to vagrant box
   become: yes
   copy:
-    src: "{{ vm_location }}/images/{{ machine_name}}/{{ machine_name }}.qcow2"
+    src: "{{ vm_location }}/images/{{ machine_name }}/{{ coreos_image | basename | splitext | first }}"
     dest: "{{ vagrant_box_location }}/box.img"
 
 - name: Copy Vagrant machine definition
