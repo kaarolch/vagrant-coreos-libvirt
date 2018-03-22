@@ -8,7 +8,7 @@
     state: directory
   with_items:
     - "{{ vm_location }}/{{ machine_name}}"
-    - "{{ vm_location }}/images/{{ machine_name}}"
+    - "{{ vm_location }}/images/{{ machine_name}}/tmp"
     - "{{ vm_location }}/vagrant/{{ machine_name}}"
 
 - name: Download images
@@ -47,7 +47,7 @@
       command: define
       xml: "{{ lookup('template', 'domain.xml.j2') }}"
 
-- name: Stop vm
+- name: Start vm
   virt:
       name: coreos
       state: running
@@ -60,7 +60,7 @@
 - name: Stop vm
   virt:
       name: coreos
-      state: shutdown
+      command: shutdown
 
 - name: Wait for machine shutdown
   pause:
@@ -74,10 +74,14 @@
 
 # Prepare vagrant image pack
 
+- name: Remove unused space
+  become: yes
+  command: "virt-sparsify --compress -o compat=0.10 --tmp {{ vm_location }}/images/{{ machine_name }}/tmp/ {{ vm_location }}/images/{{ machine_name }}/{{ coreos_image | basename | splitext | first }} {{ vm_location }}/images/{{ machine_name}}/{{ machine_name }}.img"
+
 - name: Copy image to vagrant box
   become: yes
   copy:
-    src: "{{ vm_location }}/images/{{ machine_name }}/{{ coreos_image | basename | splitext | first }}"
+    src: "{{ vm_location }}/images/{{ machine_name}}/{{ machine_name }}.img"
     dest: "{{ vagrant_box_location }}/box.img"
 
 - name: Copy Vagrant machine definition
